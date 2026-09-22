@@ -8,17 +8,25 @@ public sealed record EnvironmentReport(
     string ProcessArchitecture,
     string DetectedRid,
     string ReportedRid,
-    string BaseDirectory);
+    string BaseDirectory,
+    string BuildNote);
 
 public static class EnvironmentInfo
 {
+#if NET10_0_OR_GREATER
+    private const string BuildNote = "Збірка під net10.0 (або новіше)";
+#else
+    private const string BuildNote = "Збірка під net8.0";
+#endif
+
     public static EnvironmentReport Collect() => new(
         RuntimeInformation.OSDescription,
         RuntimeInformation.FrameworkDescription,
         RuntimeInformation.ProcessArchitecture.ToString(),
         DetectRid(),
         RuntimeInformation.RuntimeIdentifier,
-        AppContext.BaseDirectory);
+        AppContext.BaseDirectory,
+        BuildNote);
 
     private static string DetectRid()
     {
