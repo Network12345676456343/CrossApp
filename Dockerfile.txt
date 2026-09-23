@@ -1,0 +1,24 @@
+# Етап 1: Збірка застосунку
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+WORKDIR /app
+
+# Копіюємо файли рішень та проєктів для відновлення залежностей
+COPY CrossApp.sln* ./
+COPY src/Core/Core.csproj src/Core/
+COPY src/Cli/Cli.csproj src/Cli/
+
+RUN dotnet restore src/Cli/Cli.csproj
+
+# Копіюємо всі вихідні коди та публікуємо під Linux
+COPY src/Core/ src/Core/
+COPY src/Cli/ src/Cli/
+
+RUN dotnet publish src/Cli/Cli.csproj -c Release -r linux-x64 -f net10.0 --self-contained false -o /app/publish
+
+# Етап 2: Фінальний образ для запуску (Linux Runtime)
+FROM mcr.microsoft.com/dotnet/runtime:10.0 AS runtime
+WORKDIR /app
+
+COPY --from=build /app/publish .
+
+ENTRYPOINT ["dotnet", "Cli.dll"]
