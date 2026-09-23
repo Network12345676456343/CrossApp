@@ -1,53 +1,30 @@
-Runtime
+### Runtime та публікація
 
-Для перевірки кросплатформності проєкту використано два Runtime Identifier (RID):
+Для перевірки крос-платформності проєкту використано два Runtime Identifier (RID):
+* **win-x64** — для запуску застосунку на Windows x64;
+* **linux-x64** — для запуску застосунку на Linux x64.
 
-win-x64 — для запуску застосунку на Windows x64;
+Для кожного RID перевірено режими публікації: `self-contained`, `framework-dependent` та додатковий режим `single-file`.
 
-linux-x64 — для запуску застосунку на Linux x64.
+| RID | Режим публікації | Розмір publish | Кількість файлів | Потрібен .NET Runtime | Опис середовища |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `win-x64` | **self-contained** | ~76.7 МБ | 192 | **Ні** | Містить у собі повну копію CoreCLR та системні збірки BCL. Автономний запуск на Windows. |
+| `win-x64` | **framework-dependent** | ~0.2 МБ | 7 | **Так (.NET 10)** | Містить лише скомпільований код застосунку. Залежить від встановленого в системі .NET 10 Runtime. |
+| `win-x64` | **single-file** | ~70.2 МБ | 3 | **Ні** | Усі системні бібліотеки та CoreCLR упаковані всередину одного монолітного файлу Cli.exe. |
+| `linux-x64` | **self-contained** | ~78.8 МБ | 192 | **Ні** | Нативний виконуваний бінарник під Linux з власним рантаймом. Запускається без інсталяції .NET. |
+| `linux-x64` | **framework-dependent** | ~0.2 МБ | 7 | **Так (.NET 10)** | Лише IL-байткод програми. Для роботи вимагає попередньо встановленого середовища .NET 10 на хості Linux. |
 
-Для кожного RID перевірено два режими публікації: self-contained та framework-dependent.
+* **Self-contained**: пакує застосунок разом із середовищем виконання .NET Runtime (CLR) та бібліотеками BCL під конкретний RID. На цільовій системі (або в контейнері) встановлений .NET не потрібен, але розмір пакету сягає ~77–79 МБ.
+* **Framework-dependent**: містить лише скомпільований код застосунку та сторонні бібліотеки. Займає мінімум місця (~0.2 МБ), проте вимагає наявності встановленого .NET 10 Runtime у хостовій системі чи контейнері.
+* **Single-file**: об'єднує всі компоненти та runtime в один монолітний виконуваний файл, що зменшує кількість файлів у каталозі з 192 до 3 і спрощує розгортання програми.
 
-RID	Режим публікації	Розмір publish	Кількість файлів	Потрібен .NET Runtime
-win-x64	self-contained	78 MB	197	Ні
-win-x64	framework-dependent	237 KB	10	Так (.NET 10)
-linux-x64	self-contained	80 MB	197	Ні
-linux-x64	framework-dependent	153 KB	10	Так (.NET 10)
+#### Команди публікації під Windows:
+```bash
+# Self-contained
+dotnet publish src/Cli -c Release -r win-x64 -f net10.0 --self-contained true -o publish/win-x64-self
 
-Self-contained — застосунок публікується разом із необхідним .NET Runtime та бібліотеками. Тому на цільовій системі не потрібно додатково встановлювати .NET Runtime. Недоліком є більший розмір publish-директорії.
+# Framework-dependent
+dotnet publish src/Cli -c Release -r win-x64 -f net10.0 --self-contained false -o publish/win-x64-fdd
 
-Framework-dependent — публікується лише застосунок та його залежності, без .NET Runtime. Такий варіант має значно менший розмір, але для запуску на цільовій системі необхідно мати встановлений .NET 10 Runtime.
-
-Публікація під Windows:
-
-dotnet publish src/Cli -c Release -r win-x64 --self-contained true
-dotnet publish src/Cli -c Release -r win-x64 --self-contained false
-
-
-Публікація під Linux:
-
-dotnet publish src/Cli -c Release -r linux-x64 --self-contained true
-dotnet publish src/Cli -c Release -r linux-x64 --self-contained false
-
-
-Self-contained версію Windows можна запустити без dotnet run:
-
-.\src\Cli\bin\Release\net10.0\win-x64\publish\Cli.exe
-
-
-Self-contained версію Linux:
-
-chmod +x src/Cli/bin/Release/net10.0/linux-x64/publish/Cli
-./src/Cli/bin/Release/net10.0/linux-x64/publish/Cli
-
-
-Framework-dependent версії запускаються через встановлений .NET Runtime:
-
-dotnet ./src/Cli/bin/Release/net10.0/win-x64/publish/Cli.dll
-dotnet ./src/Cli/bin/Release/net10.0/linux-x64/publish/Cli.dll
-
-
-Таким чином, self-contained забезпечує автономний запуск без встановлення .NET, тоді як framework-dependent дозволяє отримати значно менший пакет за умови наявності .NET 10 Runtime у системі.
-framework-dependent — потребує встановленого .NET 10 Runtime, але має значно менший розмір публікації.
-
-Для контейнеризації використовується Linux-образ. Його можна зібрати та запустити як у Linux, так і у Windows через Docker Desktop.
+# Single-file
+dotnet publish src/Cli -c Release -r win-x64 -f net10.0 --self-contained true -p:PublishSingleFile=true -o publish/win-x64-single
