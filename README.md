@@ -30,3 +30,34 @@ dotnet publish src/Cli -c Release -r win-x64 -f net10.0 --self-contained false -
 
 # Single-file
 dotnet publish src/Cli -c Release -r win-x64 -f net10.0 --self-contained true -p:PublishSingleFile=true -o publish/win-x64-single
+
+Публікація під Windows (win-x64)
+
+Self-contained (автономна збірка):
+dotnet publish src/Cli -c Release -r win-x64 -f net10.0 --self-contained true -o publish/win-x64-self
+
+Перевірка розміру та кількості файлів у PowerShell:
+$f = Get-ChildItem -Recurse -File publish/win-x64-self; Write-Host "Файлів:" $f.Count "\vert{} Розмір:" ([Math]::Round(($f | Measure-Object Length -Sum).Sum / 1MB, 2)) "MB"
+
+Framework-dependent (залежна від .NET 10 Runtime):
+dotnet publish src/Cli -c Release -r win-x64 -f net10.0 --self-contained false -o publish/win-x64-fdd
+
+Перевірка розміру:
+$f = Get-ChildItem -Recurse -File publish/win-x64-fdd; Write-Host "Файлів:" $f.Count "\vert{} Розмір:" ([Math]::Round(($f | Measure-Object Length -Sum).Sum / 1KB, 2)) "KB"
+
+Публікація під Linux (linux-x64)
+
+Self-contained (автономна збірка для Linux):
+dotnet publish src/Cli -c Release -r linux-x64 -f net10.0 --self-contained true -o publish/linux-x64-self
+
+Перевірка розміру:
+$f = Get-ChildItem -Recurse -File publish/linux-x64-self; Write-Host "Файлів:" $f.Count "\vert{} Розмір:" ([Math]::Round(($f | Measure-Object Length -Sum).Sum / 1MB, 2)) "MB"
+
+Framework-dependent для Linux:
+dotnet publish src/Cli -c Release -r linux-x64 -f net10.0 --self-contained false -o publish/linux-x64-fdd
+
+Перевірка розміру:
+$f = Get-ChildItem -Recurse -File publish/linux-x64-fdd; Write-Host "Файлів:" $f.Count "\vert{} Розмір:" ([Math]::Round(($f | Measure-Object Length -Sum).Sum / 1KB, 2)) "KB"
+
+Прямий запуск скомпільованого бінарника Windows:
+.\publish\win-x64-self\Cli.exe
