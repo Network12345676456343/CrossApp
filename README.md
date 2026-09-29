@@ -1,63 +1,194 @@
-### Runtime та публікація
+CrossApp — Лабораторна робота №3
 
-Для перевірки крос-платформності проєкту використано два Runtime Identifier (RID):
-* **win-x64** — для запуску застосунку на Windows x64;
-* **linux-x64** — для запуску застосунку на Linux x64.
+Предметна область: Бібліотечний каталог (Library Domain)
+Платформа: .NET 10, C# 12+
 
-Для кожного RID перевірено три режими публікації: `self-contained`, `framework-dependent` та `single-file`.
+1. Опис роботи
 
-| RID | Режим публікації | Розмір publish | Кількість файлів | Потрібен .NET Runtime | Опис середовища |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| `win-x64` | **self-contained** | ~76.7 МБ | 192 | **Ні** | Включає `Cli.exe`, CoreCLR та збірки BCL. Автономний запуск на Windows. |
-| `win-x64` | **framework-dependent** | ~0.2 МБ | 7 | **Так (.NET 10)** | Містить лише скомпільований код застосунку. Залежить від встановленого в системі .NET 10 Runtime. |
-| `win-x64` | **single-file** | ~70.2 МБ | 3 | **Ні** | Усі системні бібліотеки та CoreCLR упаковані всередину одного монолітного файлу `Cli.exe`. |
-| `linux-x64` | **self-contained** | ~78.8 МБ | 192 | **Ні** | Нативний виконуваний бінарник під Linux з власним рантаймом. Запускається без інсталяції .NET. |
-| `linux-x64` | **framework-dependent** | ~0.2 МБ | 7 | **Так (.NET 10)** | Лише IL-байткод програми. Для роботи вимагає попередньо встановленого середовища .NET 10 на хості Linux. |
-| `linux-x64` | **single-file** | ~72.4 МБ | 2 | **Ні** | Один виконуваний бінарний ELF-файл Linux (і `.pdb`), який містить у собі весь .NET Runtime. |
-| `win-x64` | **trimmed** | ~25.4 МБ | 55 | **Ні** | Self-contained з увімкненим Trimming (`PublishTrimmed=true`): невикористаний код BCL вирізано, розмір суттєво зменшено. |
-| `linux-x64` | **trimmed** | ~26.8 МБ | 55 | **Ні** | Self-contained з увімкненим Trimming (`PublishTrimmed=true`): невикористаний код видалено з Linux-рантайму. |
-* **Self-contained**: пакує застосунок разом із середовищем виконання .NET Runtime (CLR) та бібліотеками BCL під конкретний RID. На цільовій системі (або в контейнері) встановлений .NET не потрібен, але розмір пакету сягає ~77–79 МБ.
-* **Framework-dependent**: містить лише скомпільований код застосунку та сторонні бібліотеки. Займає мінімум місця (~0.2 МБ), проте вимагає наявності встановленого .NET 10 Runtime у хостовій системі чи контейнері.
-* **Single-file**: об'єднує всі компоненти та runtime в один монолітний виконуваний файл, що зменшує кількість файлів у каталозі з 192 до 2–3 і спрощує розгортання програми.
+Мета лабораторної роботи — представити базові дані предметної області у вигляді незмінних record-типів (DTO) та реалізувати надійний механізм імпорту даних із CSV та JSON-файлів.
 
-#### Команди публікації під Windows:
-```bash
-# Self-contained
-dotnet publish src/Cli -c Release -r win-x64 -f net10.0 --self-contained true -o publish/win-x64-self
+Розбір вхідних даних побудований із використанням сучасних можливостей C#, зокрема:
 
-# Framework-dependent
-dotnet publish src/Cli -c Release -r win-x64 -f net10.0 --self-contained false -o publish/win-x64-fdd
+record-типів;
+pattern matching;
+switch expressions;
+nullable reference types;
+generic-типів.
 
-# Single-file
-dotnet publish src/Cli -c Release -r win-x64 -f net10.0 --self-contained true -p:PublishSingleFile=true -o publish/win-x64-single
+Пошкоджені або некоректні записи обробляються без переривання імпорту інших коректних даних.
 
-Публікація під Windows (win-x64)
+2. Структура проєкту
+CrossApp/
+├── data/
+│   ├── sample.csv                  # Вхідні дані CSV
+│   └── sample.json                 # Вхідні дані JSON
+│
+└── src/
+    ├── Core/
+    │   ├── Dto/
+    │   │   ├── BookDto.cs          # Незмінний record книги
+    │   │   ├── ReaderDto.cs        # Record читача бібліотеки
+    │   │   └── ImportResult.cs     # Узагальнений контейнер результатів імпорту
+    │   │
+    │   └── Import/
+    │       ├── BookCsvImporter.cs  # Розбір CSV через switch expression
+    │       └── BookJsonImporter.cs # Розбір JSON через System.Text.Json
+    │
+    └── Cli/
+        └── Program.cs              # Консольний інтерфейс, валідація та статистика
+3. Специфікація вхідних форматів даних
+3.1. CSV — data/sample.csv
 
-Self-contained (автономна збірка):
-dotnet publish src/Cli -c Release -r win-x64 -f net10.0 --self-contained true -o publish/win-x64-self
+Кодування: UTF-8
+Роздільник колонок: ; (крапка з комою)
+Заголовок: присутній у першому рядку та ігнорується парсером.
 
-Перевірка розміру та кількості файлів у PowerShell:
-$f = Get-ChildItem -Recurse -File publish/win-x64-self; Write-Host "Файлів:" $f.Count "\vert{} Розмір:" ([Math]::Round(($f | Measure-Object Length -Sum).Sum / 1MB, 2)) "MB"
+Приклад заголовка:
 
-Framework-dependent (залежна від .NET 10 Runtime):
-dotnet publish src/Cli -c Release -r win-x64 -f net10.0 --self-contained false -o publish/win-x64-fdd
+id;isbn;title;year;author
 
-Перевірка розміру:
-$f = Get-ChildItem -Recurse -File publish/win-x64-fdd; Write-Host "Файлів:" $f.Count "\vert{} Розмір:" ([Math]::Round(($f | Measure-Object Length -Sum).Sum / 1KB, 2)) "KB"
+Файл містить 11 валідних та 3 пошкоджені записи.
 
-Публікація під Linux (linux-x64)
+Схема колонок
+Поле	Тип	Обов'язковість	Опис
+Id	string	Обов'язкове	Унікальний ідентифікатор книги, наприклад B-001
+Isbn	string	Обов'язкове	Міжнародний стандартний номер книги
+Title	string	Обов'язкове	Назва книги
+Year	int	Обов'язкове	Рік видання у діапазоні 1450–поточний рік
+Author	string?	Необов'язкове	Автор книги; може бути порожнім
 
-Self-contained (автономна збірка для Linux):
-dotnet publish src/Cli -c Release -r linux-x64 -f net10.0 --self-contained true -o publish/linux-x64-self
+Рік видання розбирається з використанням CultureInfo.InvariantCulture.
 
-Перевірка розміру:
-$f = Get-ChildItem -Recurse -File publish/linux-x64-self; Write-Host "Файлів:" $f.Count "\vert{} Розмір:" ([Math]::Round(($f | Measure-Object Length -Sum).Sum / 1MB, 2)) "MB"
+3.2. JSON — data/sample.json
 
-Framework-dependent для Linux:
-dotnet publish src/Cli -c Release -r linux-x64 -f net10.0 --self-contained false -o publish/linux-x64-fdd
+JSON-файл містить масив об'єктів із такими полями:
 
-Перевірка розміру:
-$f = Get-ChildItem -Recurse -File publish/linux-x64-fdd; Write-Host "Файлів:" $f.Count "\vert{} Розмір:" ([Math]::Round(($f | Measure-Object Length -Sum).Sum / 1KB, 2)) "KB"
+[
+  {
+    "id": "B-001",
+    "isbn": "978-3-16-148410-0",
+    "title": "Example Book",
+    "year": 2020,
+    "author": "Example Author"
+  }
+]
 
-Прямий запуск скомпільованого бінарника Windows:
-.\publish\win-x64-self\Cli.exe
+Поля:
+
+id
+isbn
+title
+year
+author
+
+Для десеріалізації використовується System.Text.Json.
+
+Мапінг назв властивостей є регістронезалежним.
+
+4. Використані мовні засоби C#
+4.1. Позиційні record
+
+Для представлення DTO використано незмінні record-типи.
+
+Переваги:
+
+порівняння об'єктів за значеннями;
+компактний синтаксис;
+init-only властивості;
+незмінність даних після створення об'єкта.
+4.2. Nullable reference types
+
+Необов'язкові поля явно позначаються за допомогою ?.
+
+Наприклад:
+
+string? Author
+
+Таким чином, компілятор може контролювати можливість використання null.
+
+4.3. Switch expressions та Pattern matching
+
+У BookCsvImporter використано сучасний синтаксис C# для розбору CSV-записів.
+
+Зокрема застосовуються:
+
+Патерн властивостей та реляційний патерн:
+
+{ Length: < 4 }
+
+Патерн списку зі зрізом та константним патерном:
+
+["", _, _, ..]
+
+Охоронна умова when:
+
+[_, _, _, var yearStr, ..] when
+    !int.TryParse(...)
+
+Позиційне зв'язування:
+
+[var id, var isbn, var title, var yearStr, var author]
+
+Такий підхід дозволяє компактно перевіряти структуру рядка та обробляти некоректні записи без припинення всього процесу імпорту.
+
+4.4. Узагальнений тип ImportResult<T>
+
+Для зберігання результатів імпорту використовується узагальнений тип:
+
+ImportResult<T>
+
+Він працює з інтерфейсом:
+
+IReadOnlyList<T>
+
+Це дозволяє використовувати один контейнер результатів для різних типів даних.
+
+5. Інструкція із запуску
+5.1. Збірка проєкту
+
+Виконайте в PowerShell:
+
+dotnet build
+5.2. Запуск основного сценарію — CSV
+
+Для публікації застосунку виконайте:
+
+dotnet publish src/Cli -c Debug -f net10.0 -r win-x64 --self-contained false -p:PublishSingleFile=true -o ./publish
+
+Після успішної публікації запустіть:
+
+.\publish\Cli.exe
+
+Або передайте CSV-файл явно:
+
+.\publish\Cli.exe data/sample.csv
+5.3. Запуск імпортера JSON
+
+Для перевірки додаткового імпорту JSON:
+
+.\publish\Cli.exe data/sample.json
+5.4. Перевірка обробки відсутнього файлу
+
+Для перевірки реакції програми на файл, якого не існує:
+
+.\publish\Cli.exe data/not_found.csv
+
+Перевірити код завершення можна командою:
+
+$LASTEXITCODE
+
+Очікуваний результат:
+
+1
+6. Збереження змін у Git
+
+Після оновлення README.md збережіть файл за допомогою:
+
+Ctrl + S
+
+Потім виконайте в терміналі:
+
+git add README.md
+git commit -m "docs: update README with lab03 data formats and instructions"
+
+Після цього зміни у README.md будуть додані до Git та зафіксовані окремим комітом.
