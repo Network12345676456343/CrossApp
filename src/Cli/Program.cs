@@ -1,27 +1,39 @@
-﻿using System.Text.Encodings.Web;
-using System.Text.Json;
-using Core;
+﻿using System.Text;
+using Core.Dto;
+using Core.Import;
 
-EnvironmentReport report = EnvironmentInfo.Collect();
+Console.OutputEncoding = Encoding.UTF8;
 
-if (args.Length > 0 && args[0] == "--json")
+string path = args.Length > 0 ? args[0] : Path.Combine("data", "sample.csv");
+
+if (!File.Exists(path))
 {
-    var options = new JsonSerializerOptions
+    Console.WriteLine($"Помилка: файл не знайдено за шляхом: {Path.GetFullPath(path)}");
+    return 1;
+}
+
+ImportResult<BookDto> result = BookCsvImporter.Load(path);
+
+Console.WriteLine($"Завантажено записів: {result.Items.Count}");
+Console.WriteLine(new string('-', 78));
+Console.WriteLine($"  {"ID",-7} {"ISBN",-19} {"РІК",-6} {"НАЗВА",-28} {"АВТОР"}");
+Console.WriteLine(new string('-', 78));
+
+foreach (BookDto b in result.Items.Take(5))
+{
+    string author = b.Author ?? "—";
+    Console.WriteLine($"  {b.Id,-7} {b.Isbn,-19} {b.Year,-6} {b.Title,-28} {author}");
+}
+
+Console.WriteLine(new string('-', 78));
+
+if (result.Errors.Count > 0)
+{
+    Console.WriteLine($"Пропущено рядків: {result.Errors.Count}");
+    foreach (string err in result.Errors)
     {
-        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-        WriteIndented = false
-    };
-    Console.WriteLine(JsonSerializer.Serialize(report, options));
+        Console.WriteLine($"  ! {err}");
+    }
 }
-else
-{
-    Console.WriteLine("CrossApp – інформація про середовище");
-    Console.WriteLine(new string('-', 52));
-    Console.WriteLine($"ОС             : {report.OsDescription}");
-    Console.WriteLine($"Runtime        : {report.FrameworkDescription}");
-    Console.WriteLine($"Архітектура    : {report.ProcessArchitecture}");
-    Console.WriteLine($"RID (визначено): {report.DetectedRid}");
-    Console.WriteLine($"RID (від .NET) : {report.ReportedRid}");
-    Console.WriteLine($"Каталог        : {report.BaseDirectory}");
-    Console.WriteLine($"Цільова збірка : {report.BuildNote}");
-}
+
+return 0;
