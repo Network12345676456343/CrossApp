@@ -482,3 +482,8 @@ $RECYCLE.BIN/
 *.swp
 
 publish/
+
+bin/
+obj/
+publish/
+publish-dll/
