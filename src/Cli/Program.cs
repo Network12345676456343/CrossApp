@@ -1,98 +1,68 @@
-﻿using Core.Domain;
-using Core.Dto;
-using Core.Import;
+﻿using Core;
+using Core.Abstractions;
+using Core.Domain;
+using Core.Services;
+using Core.Storage;
 
 Console.OutputEncoding = System.Text.Encoding.UTF8;
 
-Console.WriteLine("=== СЦЕНАРІЙ 1: Успішна робота з доменною моделлю ===");
+// 1. Composition Root: Ручний DI
+bool useFile = args.Contains("--file");
+string dataPath = Path.Combine(AppContext.BaseDirectory, "data", "catalog.json");
 
-var copy = BookCopy.Create("BC-101", "978-0-13-235088-4", "Clean Code", isIssued: false);
-Console.WriteLine($"Створено примірник: {copy}");
+ILoanStore store = useFile
+    ? new FileLoanStore(dataPath)
+    : new InMemoryLoanStore(SampleData.Loans());
 
-var loanTime = DateTime.UtcNow.AddHours(-2);
-var loan = Loan.Open("LN-001", copy, "READER-42", loanTime);
-Console.WriteLine($"Відкрито видачу: {loan}");
-Console.WriteLine($"Стан примірника після видачі: {copy}");
+var service = new LendingService(store);
 
-loan.Close(copy, DateTime.UtcNow);
-Console.WriteLine($"Закрито видачу: {loan}");
-Console.WriteLine($"Стан примірника після повернення: {copy}");
+Console.WriteLine($"=================================================");
+Console.WriteLine($"Сховище: {store.GetType().Name}");
+Console.WriteLine($"=================================================\n");
 
-Console.WriteLine();
-Console.WriteLine("=== СЦЕНАРІЙ 2: Базові інваріанти сутностей ===");
-
-TryDo("Порожній ISBN", () => BookCopy.Create("BC-102", "   ", "Refactoring"));
-
-var busyCopy = BookCopy.Create("BC-200", "978-0-201-48567-7", "DDD", isIssued: false);
-Loan.Open("LN-002", busyCopy, "READER-01", DateTime.UtcNow);
-TryDo("Повторна видача вже виданого примірника", () => Loan.Open("LN-003", busyCopy, "READER-02", DateTime.UtcNow));
-
-var validCopy = BookCopy.Create("BC-300", "978-0-321-12521-7", "TDD", isIssued: false);
-var activeLoan = Loan.Open("LN-004", validCopy, "READER-05", DateTime.UtcNow);
-TryDo("Дата повернення раніша за дату видачі", () => activeLoan.Close(validCopy, DateTime.UtcNow.AddDays(-1)));
-
-Console.WriteLine();
-Console.WriteLine("=== ДОДАТКОВЕ ЗАВДАННЯ 3: Перевірка переходів станів (switch expression) ===");
-
-var stateCopy = BookCopy.Create("BC-400", "978-0-13-449416-6", "Clean Architecture", isIssued: false);
-var loanForState = Loan.Open("LN-005", stateCopy, "READER-10", DateTime.UtcNow.AddHours(-1));
-loanForState.Close(stateCopy, DateTime.UtcNow);
-
-TryDo("Повторне закриття вже закритої видачі", () => loanForState.Close(stateCopy, DateTime.UtcNow));
-TryDo("Скасування вже закритої видачі", () => loanForState.Cancel(stateCopy));
-
-Console.WriteLine();
-Console.WriteLine("=== ДОДАТКОВЕ ЗАВДАННЯ 2: Інваріант двох сутностей (ліміт 5 видач) ===");
-
-var existingLoans = new List<Loan>();
-for (int i = 1; i <= 5; i++)
+// 2. Демонстрація операцій
+try
 {
-    var c = BookCopy.Create($"BC-LIMIT-{i}", $"ISBN-{i}", $"Book {i}");
-    existingLoans.Add(Loan.Open($"LN-EXIST-{i}", c, "READER-LIMIT", DateTime.UtcNow));
-}
+    Console.WriteLine("[1] Створення нової видачі примірника книги...");
+    var newLoan = service.IssueCopy("BC-204", "READER-042");
+    Console.WriteLine($"  Створено видачу: {newLoan.Id} | Примірник: {newLoan.BookCopyId} -> Читач: {newLoan.ReaderId} | Стан: {newLoan.Status}");
 
-var extraCopy = BookCopy.Create("BC-LIMIT-6", "ISBN-6", "Book 6");
-TryDo("Спроба взяти 6-ту книгу читачем з 5 активними видачами", () =>
-{
-    LoanPolicy.IssueBook("LN-LIMIT-6", extraCopy, "READER-LIMIT", existingLoans, DateTime.UtcNow);
-});
+    Console.WriteLine("\n[2] Повернення примірника (закриття видачі)...");
+    service.ReturnCopy(newLoan.Id);
+    Console.WriteLine($"  Видачу {newLoan.Id} успішно закрито.");
 
-Console.WriteLine();
-Console.WriteLine("=== ДОДАТКОВЕ ЗАВДАННЯ 1: Зв'язок з ImportResult (дані + помилки) ===");
-
-var simulatedImport = new ImportResult<BookCopyDto>(
-    Items: new List<BookCopyDto>
+    Console.WriteLine("\n[3] Поточний список усіх видач у сховищі:");
+    foreach (var l in service.All())
     {
-        new("BC-501", "978-1-111-11111-1", "Design Patterns", false),
-        new("BC-502", "", "Book without ISBN", false), // Помилка інваріанту
-        new("BC-503", "978-2-222-22222-2", "Domain-Driven Design Distilled", false)
-    },
-    Errors: new List<string> { "Рядок 4: файл пошкоджено, пропущено кому" } // Помилка парсингу файлу
-);
-
-var processed = simulatedImport.ToDomainEntities();
-
-Console.WriteLine($"Успішно створено доменних сутностей: {processed.ValidEntities.Count}");
-foreach (var item in processed.ValidEntities)
-    Console.WriteLine($"  [OK] {item}");
-
-Console.WriteLine($"Помилки формату файлу (з тижня 3): {processed.ParsingErrors.Count}");
-foreach (var err in processed.ParsingErrors)
-    Console.WriteLine($"  [FILE ERROR] {err}");
-
-Console.WriteLine($"Помилки доменних інваріантів: {processed.InvariantErrors.Count}");
-foreach (var (failedDto, err) in processed.InvariantErrors)
-    Console.WriteLine($"  [DOMAIN ERROR] Id='{failedDto.Id}': {err}");
-
-static void TryDo(string title, Action action)
-{
-    try
-    {
-        action();
-        Console.WriteLine($"  [ПОМИЛКА ТЕСТУ] {title}: виняток НЕ виник!");
+        Console.WriteLine($"  [{l.Id}] Примірник: {l.BookCopyId,-8} | Читач: {l.ReaderId,-10} | Стан: {l.Status,-9} | Дата: {l.IssuedAtUtc:yyyy-MM-dd}");
     }
-    catch (Exception ex)
+
+    // Демонстрація пошуку за предикатом Func<Loan, bool>
+    Console.WriteLine("\n[*] Фільтрація: тільки активні видачі (через Func):");
+    var activeLoans = service.Find(l => l.Status == LoanStatus.Active);
+    foreach (var l in activeLoans)
     {
-        Console.WriteLine($"  [СПРАЦЮВАВ ІНВАРІАНТ] {title} -> {ex.GetType().Name}: {ex.Message}");
+        Console.WriteLine($"  -> Активна позичка: {l.Id} для читача {l.ReaderId}");
     }
 }
+catch (Exception ex)
+{
+    Console.ForegroundColor = ConsoleColor.Red;
+    Console.WriteLine($"Помилка бізнес-логіки: {ex.Message}");
+    Console.ResetColor();
+}
+
+// 3. Сценарій відмови
+Console.WriteLine("\n-------------------------------------------------");
+Console.WriteLine("[4] Перевірка обробки відмови (спроба закрити неіснуючий запис):");
+try
+{
+    service.ReturnCopy("UNKNOWN-ID");
+}
+catch (InvalidOperationException ex)
+{
+    Console.ForegroundColor = ConsoleColor.Yellow;
+    Console.WriteLine($"  [Очікувана помилка перехоплена]: {ex.Message}");
+    Console.ResetColor();
+}
+Console.WriteLine("-------------------------------------------------");

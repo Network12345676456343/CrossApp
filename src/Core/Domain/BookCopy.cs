@@ -9,15 +9,9 @@ public sealed class BookCopy
     public string Title { get; }
     public bool IsIssued { get; private set; }
 
-    private BookCopy(string id, string isbn, string title, bool isIssued)
-    {
-        Id = id;
-        Isbn = isbn;
-        Title = title;
-        IsIssued = isIssued;
-    }
-
-    public static BookCopy Create(string id, string isbn, string title, bool isIssued = false)
+    // Публічний конструктор: дозволяє виклик як new BookCopy("BC-101"),
+    // так і передачу повних даних, не ламаючи валідацію
+    public BookCopy(string id, string isbn = "978-0-00-000000-0", string title = "Без назви", bool isIssued = false)
     {
         if (string.IsNullOrWhiteSpace(id))
             throw new ArgumentException("Ідентифікатор примірника не може бути порожнім", nameof(id));
@@ -28,8 +22,14 @@ public sealed class BookCopy
         if (string.IsNullOrWhiteSpace(title))
             throw new ArgumentException("Назва книги не може бути порожньою", nameof(title));
 
-        return new BookCopy(id.Trim(), isbn.Trim().ToUpperInvariant(), title.Trim(), isIssued);
+        Id = id.Trim();
+        Isbn = isbn.Trim().ToUpperInvariant();
+        Title = title.Trim();
+        IsIssued = isIssued;
     }
+
+    public static BookCopy Create(string id, string isbn, string title, bool isIssued = false) =>
+        new(id, isbn, title, isIssued);
 
     public void Issue()
     {

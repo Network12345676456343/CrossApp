@@ -1,6 +1,7 @@
-using Core.Dto;
-
 namespace Core.Domain;
+
+using System;
+using Core.Dto;
 
 public sealed class Loan
 {
@@ -27,10 +28,13 @@ public sealed class Loan
         Status = status;
     }
 
-    public static Loan Open(string id, BookCopy copy, string readerId, DateTime issuedAtUtc)
+    public static Loan Open(
+        string id,
+        BookCopy copy,
+        string readerId,
+        DateTime issuedAtUtc)
     {
-        if (copy is null)
-            throw new ArgumentNullException(nameof(copy), "Примірник книги обов'язковий");
+        ArgumentNullException.ThrowIfNull(copy, "Примірник книги обов'язковий");
 
         if (string.IsNullOrWhiteSpace(id))
             throw new ArgumentException("Ідентифікатор видачі обов'язковий", nameof(id));
@@ -39,7 +43,9 @@ public sealed class Loan
             throw new ArgumentException("Ідентифікатор читача обов'язковий", nameof(readerId));
 
         if (issuedAtUtc > DateTime.UtcNow.AddMinutes(5))
-            throw new ArgumentOutOfRangeException(nameof(issuedAtUtc), issuedAtUtc,
+            throw new ArgumentOutOfRangeException(
+                nameof(issuedAtUtc),
+                issuedAtUtc,
                 "Дата видачі не може належати майбутньому часу");
 
         copy.Issue();
@@ -55,19 +61,11 @@ public sealed class Loan
 
     public void Close(BookCopy copy, DateTime returnedAtUtc)
     {
-        if (copy is null)
-            throw new ArgumentNullException(nameof(copy));
+        ArgumentNullException.ThrowIfNull(copy);
 
         if (copy.Id != BookCopyId)
-            throw new InvalidOperationException($"Невідповідність примірника: видача прив'язана до {BookCopyId}, передано {copy.Id}");
-
-        Status = Status switch
-        {
-            LoanStatus.Active => LoanStatus.Returned,
-            LoanStatus.Returned => throw new InvalidOperationException($"Видача '{Id}' уже була закрита раніше"),
-            LoanStatus.Cancelled => throw new InvalidOperationException($"Видача '{Id}' скасована, її не можна завершити поверненням"),
-            _ => throw new InvalidOperationException($"Невідомий стан видачі: {Status}")
-        };
+            throw new InvalidOperationException(
+                $"Невідповідність примірника: видача прив'язана до {BookCopyId}, передано {copy.Id}");
 
         if (returnedAtUtc < IssuedAtUtc)
             throw new ArgumentOutOfRangeException(
@@ -75,21 +73,38 @@ public sealed class Loan
                 returnedAtUtc,
                 $"Дата повернення ({returnedAtUtc:yyyy-MM-dd HH:mm}) не може бути ранішою за дату видачі ({IssuedAtUtc:yyyy-MM-dd HH:mm})");
 
+        switch (Status)
+        {
+            case LoanStatus.Active:
+                break;
+
+            case LoanStatus.Returned:
+                throw new InvalidOperationException($"Видача '{Id}' уже була закрита раніше");
+
+            case LoanStatus.Cancelled:
+                throw new InvalidOperationException($"Видача '{Id}' скасована, її не можна завершити поверненням");
+
+            default:
+                throw new InvalidOperationException($"Невідомий стан видачі: {Status}");
+        }
+
         ReturnedAtUtc = returnedAtUtc;
+        Status = LoanStatus.Returned;
         copy.Return();
     }
 
     public void Cancel(BookCopy copy)
     {
-        if (copy is null)
-            throw new ArgumentNullException(nameof(copy));
+        ArgumentNullException.ThrowIfNull(copy);
 
-        Status = Status switch
-        {
-            LoanStatus.Active => LoanStatus.Cancelled,
-            _ => throw new InvalidOperationException($"Неможливо скасувати видачу '{Id}' у стані {Status}")
-        };
+        if (copy.Id != BookCopyId)
+            throw new InvalidOperationException(
+                $"Невідповідність примірника: видача прив'язана до {BookCopyId}, передано {copy.Id}");
 
+        if (Status != LoanStatus.Active)
+            throw new InvalidOperationException($"Неможливо скасувати видачу '{Id}' у стані {Status}");
+
+        Status = LoanStatus.Cancelled;
         copy.Return();
     }
 
@@ -103,8 +118,13 @@ public sealed class Loan
 
     public static Loan FromDto(LoanDto dto)
     {
-        if (!Enum.TryParse<LoanStatus>(dto.Status, true, out var status))
+        ArgumentNullException.ThrowIfNull(dto);
+
+        if (!Enum.TryParse<LoanStatus>(dto.Status, true, out var status)
+            || !Enum.IsDefined(typeof(LoanStatus), status))
+        {
             throw new ArgumentException($"Невідомий статус у DTO: {dto.Status}", nameof(dto));
+        }
 
         if (string.IsNullOrWhiteSpace(dto.Id))
             throw new ArgumentException("Ідентифікатор у DTO обов'язковий", nameof(dto));
@@ -115,9 +135,26 @@ public sealed class Loan
         if (string.IsNullOrWhiteSpace(dto.ReaderId))
             throw new ArgumentException("Ідентифікатор читача у DTO обов'язковий", nameof(dto));
 
-        if (dto.ReturnedAtUtc.HasValue && dto.ReturnedAtUtc < dto.IssuedAtUtc)
-            throw new ArgumentOutOfRangeException(nameof(dto),
+        if (dto.ReturnedAtUtc.HasValue && dto.ReturnedAtUtc.Value < dto.IssuedAtUtc)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(dto),
                 "Дата повернення у DTO не може передувати даті видачі");
+        }
+
+        if (status == LoanStatus.Returned && !dto.ReturnedAtUtc.HasValue)
+        {
+            throw new ArgumentException(
+                "Для поверненої видачі необхідно вказати дату повернення",
+                nameof(dto));
+        }
+
+        if (status != LoanStatus.Returned && dto.ReturnedAtUtc.HasValue)
+        {
+            throw new ArgumentException(
+                "Дата повернення може бути вказана лише для поверненої видачі",
+                nameof(dto));
+        }
 
         return new Loan(
             dto.Id.Trim(),
