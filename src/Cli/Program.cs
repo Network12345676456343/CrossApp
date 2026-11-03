@@ -1,121 +1,113 @@
-﻿using Core;
-using Core.Abstractions;
-using Core.Domain;
-using Core.Events;
-using Core.Services;
-using Core.Storage;
+﻿using System.Text.Json;
+using CrossApp.Core.Reports;
 
-Console.OutputEncoding = System.Text.Encoding.UTF8;
+var baseDir = AppContext.BaseDirectory;
+var jsonPath = Path.Combine(baseDir, "data", "sample.json");
 
-// Шляхи: лог-файл створюється безпосередньо в кореневій папці logs/
-string catalogPath = Path.Combine(AppContext.BaseDirectory, "data", "catalog.json");
-string logPath = Path.Combine(Directory.GetCurrentDirectory(), "logs", "app.log");
-
-var logDir = Path.GetDirectoryName(logPath);
-if (!string.IsNullOrEmpty(logDir))
+if (!File.Exists(jsonPath))
 {
-    Directory.CreateDirectory(logDir);
+    jsonPath = Path.Combine(Directory.GetCurrentDirectory(), "data", "sample.json");
 }
 
-// 1. Composition Root (ручний DI та тернарний вибір сховища)
-bool useFile = args.Contains("--file", StringComparer.OrdinalIgnoreCase);
-
-ILoanStore store = useFile
-    ? new FileLoanStore(catalogPath)
-    : new InMemoryLoanStore(SampleData.Loans());
-
-var service = new LendingService(store);
-
-Console.WriteLine("=================================================");
-Console.WriteLine($"Сховище: {store.GetType().Name}");
-Console.WriteLine($"Шлях до логу: {logPath}");
-Console.WriteLine("=================================================\n");
-
-// 2. Підписник 1: локальний метод (пише в консоль і дописує у logs/app.log)
-void OnLoanChanged(object? sender, LoanChangedEventArgs e)
+List<StockLine> items;
+if (File.Exists(jsonPath))
 {
-    var statusText = e.Kind == LoanChangeKind.Issued
-        ? $"видано читачу {e.ReaderId} до {e.DueUtc:yyyy-MM-dd}"
-        : $"повернуто читачем {e.ReaderId}";
-
-    var logLine = $"{e.At:HH:mm:ss} | {e.Kind,-8} | Запис: {e.LoanId} | Примірник: {e.BookCopyId} | {statusText}";
-
-    Console.ForegroundColor = ConsoleColor.Cyan;
-    Console.WriteLine($"[ПОДІЯ]: {logLine}");
-    Console.ResetColor();
-
-    File.AppendAllText(logPath, logLine + Environment.NewLine);
+    var rawText = File.ReadAllText(jsonPath);
+    var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+    items = JsonSerializer.Deserialize<List<StockLine>>(rawText, options) ?? new();
+}
+else
+{
+    items = new();
 }
 
-service.Changed += OnLoanChanged;
+var today = DateTime.Today;
+var command = args.FirstOrDefault(a => !a.StartsWith("--", StringComparison.Ordinal)) ?? "report-top";
 
-// 3. Підписник 2: лямбда-вираз із замиканням над лічильником
-int changesCount = 0;
-service.Changed += (_, _) => changesCount++;
-
-// --- Крок 1. Виконання двох операцій під час активної підписки ---
-Console.WriteLine("--- Крок 1: Активна підписка (Консоль + Файл + Лічильник) ---");
-var firstLoan = service.IssueCopy("BC-204", "READER-042");
-service.ReturnCopy(firstLoan.Id);
-
-Console.WriteLine($"\n[Лічильник] Подій отримано: {changesCount}");
-
-// --- Крок 2. Відписка від події (-=) ---
-Console.WriteLine("\n--- Крок 2: Відписка локального методу (-= OnLoanChanged) ---");
-service.Changed -= OnLoanChanged;
-
-// Операція тиха для консолі й файлу, але збільшує лічильник через замикання
-var silentLoan = service.IssueCopy("BC-305", "READER-999");
-Console.WriteLine($"[Лічильник після тихої операції] Подій отримано: {changesCount} (збільшився лише лічильник)");
-
-// --- Крок 3. Сценарій відмови ---
-Console.WriteLine("\n--- Крок 3: Сценарій відмови (помилка без виклику події) ---");
-try
+switch (command)
 {
-    service.ReturnCopy("UNKNOWN-ID");
-}
-catch (InvalidOperationException ex)
-{
-    Console.ForegroundColor = ConsoleColor.Yellow;
-    Console.WriteLine($"[Очікувана помилка перехоплена]: {ex.Message}");
-    Console.ResetColor();
-}
+    case "report-top":
+        Console.WriteLine("=== ТОП-5 ЧИТАЧІВ ЗА КІЛЬКІСТЮ ВИДАЧ ===");
+        PrintTop(ReportService.TopByQuantity(items, 5));
+        break;
 
-Console.WriteLine($"[Лічильник після винятку] Подій отримано: {changesCount} (кількість не змінилась)");
+    case "report-low":
+        Console.WriteLine($"=== ПРОСТРОЧЕНІ ВИДАЧІ (DueDate < {today:yyyy-MM-dd}) ===");
+        PrintLines(ReportService.LowStock(items, today));
+        break;
 
-// --- Крок 4. Фільтрація через Func<Loan, bool> ---
-Console.WriteLine("\n--- Крок 4: Фільтрація через Func<Loan, bool> ---");
-var activeLoans = service.FindAll(l => l.Status == LoanStatus.Active);
-foreach (var loan in activeLoans)
-{
-    Console.WriteLine($"  -> Активна позичка: {loan.Id} | Примірник: {loan.BookCopyId} | Читач: {loan.ReaderId}");
-}
-
-// -------------------------------------------------------------
-// Додаткове завдання 1: Реалізації INotificationSink всередині Cli
-// -------------------------------------------------------------
-public sealed class ConsoleSink : INotificationSink
-{
-    public void Notify(string message)
-    {
-        Console.ForegroundColor = ConsoleColor.DarkGreen;
-        Console.WriteLine($"[ConsoleSink]: {message}");
-        Console.ResetColor();
-    }
-}
-
-public sealed class FileSink(string filePath) : INotificationSink
-{
-    private readonly string _filePath = filePath ?? throw new ArgumentNullException(nameof(filePath));
-
-    public void Notify(string message)
-    {
-        var dir = Path.GetDirectoryName(_filePath);
-        if (!string.IsNullOrEmpty(dir))
+    case "report-groups":
+        Console.WriteLine("=== РОЗПОДІЛ ЗА ЧИТАЧАМИ (Method Syntax) ===");
+        foreach (var g in ReportService.ByUnit(items))
         {
-            Directory.CreateDirectory(dir);
+            Console.WriteLine($"  {g.Key,-15} позицій: {g.Count,3}  сумарно: {g.TotalQuantity,4}");
         }
+        break;
 
-        File.AppendAllText(_filePath, $"{DateTime.UtcNow:HH:mm:ss} | {message}{Environment.NewLine}");
+    case "report-groups-query":
+        Console.WriteLine("=== РОЗПОДІЛ ЗА ЧИТАЧАМИ (Query Syntax) ===");
+        foreach (var g in ReportService.ByUnitQuerySyntax(items))
+        {
+            Console.WriteLine($"  {g.Key,-15} позицій: {g.Count,3}  сумарно: {g.TotalQuantity,4}");
+        }
+        break;
+
+    case "report-sum":
+        var t = ReportService.Totals(items, today);
+        Console.WriteLine("=== ПІДСУМКОВА СТАТИСТИКА ===");
+        Console.WriteLine($"  Позицій: {t.Items}, прострочено днів: {t.TotalOverdueDays}, середній запас: {t.AverageDaysRemaining:F2} дн., макс прострочення: {t.MaxOverdueDays} дн.");
+        break;
+
+    case "report-join":
+        Console.WriteLine("=== ПРІОРИТЕТНІ ВИДАЧІ (JOIN) ===");
+        var priorityReaders = new[] { "r-101", "r-102" };
+        foreach (var j in ReportService.ActiveLoansJoin(items, priorityReaders))
+        {
+            Console.WriteLine($"  {j.LoanId,-8} Читач: {j.ReaderId,-8} Примірник: {j.BookCopyId,-8} Термін: {j.DueDate:yyyy-MM-dd}");
+        }
+        break;
+
+    case "demo-deferred":
+        RunDeferredDemo(items);
+        break;
+
+    default:
+        Console.WriteLine("report-top | report-low | report-groups | report-groups-query | report-sum | report-join | demo-deferred");
+        break;
+}
+
+static void PrintLines(IReadOnlyList<StockLine> lines)
+{
+    Console.WriteLine($"  {"ID",-8} {"Читач",-8} {"Примірник",-10} {"Термін",-12} {"Прострочено",12}");
+    Console.WriteLine($"  {new string('-', 55)}");
+    foreach (var l in lines)
+    {
+        Console.WriteLine($"  {l.Id,-8} {l.ReaderId,-8} {l.BookCopyId,-10} {l.DueDate:yyyy-MM-dd} {l.DaysOverdue,8} дн.");
     }
+}
+
+static void PrintTop(IReadOnlyList<TopReaderLine> lines)
+{
+    Console.WriteLine($"  {"Читач",-10} {"Активних видач",14}");
+    Console.WriteLine($"  {new string('-', 28)}");
+    foreach (var l in lines)
+    {
+        Console.WriteLine($"  {l.ReaderId,-10} {l.ActiveLoansCount,14}");
+    }
+}
+
+static void RunDeferredDemo(IEnumerable<StockLine> existingItems)
+{
+    Console.WriteLine("--- ДЕМОНСТРАЦІЯ ВІДКЛАДЕНОГО ВИКОНАННЯ ---");
+    var source = existingItems.ToList();
+
+    var query = source.Where(l => l.DueDate < DateTime.Today);
+    Console.WriteLine($"1. До змін у джерелі: {query.Count()}");
+
+    source.Add(new StockLine("tmp-999", "r-999", "cp-999", DateTime.Today.AddDays(-5), 5));
+    Console.WriteLine($"2. Після додавання в source: {query.Count()} (число змінилось, бо Count() переобчислив запит)");
+
+    var snapshot = query.ToList();
+    source.Clear();
+    Console.WriteLine($"3. Джерело очищене, але у знімку snapshot: {snapshot.Count} (не змінилось)");
 }

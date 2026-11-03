@@ -1,7 +1,18 @@
 [
-  { "id": "B-101", "isbn": "978-617-09-0001-1", "title": "Кобзар", "year": 1840, "author": "Тарас Шевченко" },
-  { "id": "B-102", "isbn": "978-966-03-0002-2", "title": "Лісова пісня", "year": 1911, "author": "Леся Українка" },
-  { "id": "B-103", "isbn": "978-0-123-45678-9", "title": "Brave New World", "year": 1932, "author": "Aldous Huxley" },
-  { "id": "", "isbn": "978-0-000-00000-0", "title": "Без ID", "year": 2020 },
-  { "id": "B-105", "isbn": "978-1-111-11111-1", "title": "Книга з майбутнього", "year": 2099 }
+  { "Id": "ln-001", "ReaderId": "r-101", "BookCopyId": "cp-01", "DueDate": "2026-10-15T00:00:00", "Status": 1 },
+  { "Id": "ln-002", "ReaderId": "r-101", "BookCopyId": "cp-02", "DueDate": "2026-11-20T00:00:00", "Status": 1 },
+  { "Id": "ln-003", "ReaderId": "r-101", "BookCopyId": "cp-03", "DueDate": "2026-10-25T00:00:00", "Status": 1 },
+  { "Id": "ln-004", "ReaderId": "r-102", "BookCopyId": "cp-04", "DueDate": "2026-10-30T00:00:00", "Status": 1 },
+  { "Id": "ln-005", "ReaderId": "r-102", "BookCopyId": "cp-05", "DueDate": "2026-11-15T00:00:00", "Status": 1 },
+  { "Id": "ln-006", "ReaderId": "r-103", "BookCopyId": "cp-06", "DueDate": "2026-10-10T00:00:00", "Status": 1 },
+  { "Id": "ln-007", "ReaderId": "r-104", "BookCopyId": "cp-07", "DueDate": "2026-11-25T00:00:00", "Status": 1 },
+  { "Id": "ln-008", "ReaderId": "r-105", "BookCopyId": "cp-08", "DueDate": "2026-10-28T00:00:00", "Status": 1 },
+  { "Id": "ln-009", "ReaderId": "r-101", "BookCopyId": "cp-09", "DueDate": "2026-09-01T00:00:00", "Status": 2 },
+  { "Id": "ln-010", "ReaderId": "r-102", "BookCopyId": "cp-10", "DueDate": "2026-09-15T00:00:00", "Status": 2 },
+  { "Id": "ln-011", "ReaderId": "r-106", "BookCopyId": "cp-11", "DueDate": "2026-08-20T00:00:00", "Status": 2 },
+  { "Id": "ln-012", "ReaderId": "r-107", "BookCopyId": "cp-12", "DueDate": "2026-07-10T00:00:00", "Status": 2 },
+  { "Id": "ln-013", "ReaderId": "r-108", "BookCopyId": "cp-13", "DueDate": "2026-10-01T00:00:00", "Status": 3 },
+  { "Id": "ln-014", "ReaderId": "r-109", "BookCopyId": "cp-14", "DueDate": "2026-10-05T00:00:00", "Status": 3 },
+  { "Id": "ln-015", "ReaderId": "r-103", "BookCopyId": "cp-15", "DueDate": "2026-11-18T00:00:00", "Status": 1 },
+  { "Id": "ln-016", "ReaderId": "r-110", "BookCopyId": "cp-16", "DueDate": "2026-11-12T00:00:00", "Status": 1 }
 ]
