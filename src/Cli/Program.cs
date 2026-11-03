@@ -1,4 +1,5 @@
-﻿using System.Text.Json;
+﻿using System.Diagnostics;
+using System.Text.Json;
 using CrossApp.Core.Reports;
 
 var baseDir = AppContext.BaseDirectory;
@@ -71,8 +72,12 @@ switch (command)
         RunDeferredDemo(items);
         break;
 
+    case "benchmark":
+        RunStopwatchBenchmark();
+        break;
+
     default:
-        Console.WriteLine("report-top | report-low | report-groups | report-groups-query | report-sum | report-join | demo-deferred");
+        Console.WriteLine("report-top | report-low | report-groups | report-groups-query | report-sum | report-join | demo-deferred | benchmark");
         break;
 }
 
@@ -110,4 +115,50 @@ static void RunDeferredDemo(IEnumerable<StockLine> existingItems)
     var snapshot = query.ToList();
     source.Clear();
     Console.WriteLine($"3. Джерело очищене, але у знімку snapshot: {snapshot.Count} (не змінилось)");
+}
+
+static void RunStopwatchBenchmark()
+{
+    Console.WriteLine("=== ГЕНЕРАЦІЯ 100 000 ЗАПИСІВ ДЛЯ ТЕСТУВАННЯ ===");
+    var random = new Random(42);
+    var dataset = Enumerable.Range(1, 100_000)
+        .Select(i => new StockLine(
+            Id: $"loan-{i}",
+            ReaderId: $"reader-{random.Next(1, 1000)}",
+            BookCopyId: $"copy-{random.Next(1, 5000)}",
+            DueDate: DateTime.Today.AddDays(random.Next(-60, 30)),
+            DaysOverdue: random.Next(0, 60)))
+        .ToList();
+
+    Console.WriteLine($"Згенеровано {dataset.Count:N0} записів. Запуск вимірювання...\n");
+
+    var sw = new Stopwatch();
+
+    // 1. Потоковий конвеєр без проміжного ToList
+    sw.Restart();
+    var resultLazy = dataset
+        .Where(x => x.DueDate < DateTime.Today)
+        .OrderByDescending(x => x.DaysOverdue)
+        .Select(x => x.Id)
+        .Take(50)
+        .ToList();
+    sw.Stop();
+    var timeLazy = sw.ElapsedMilliseconds;
+
+    // 2. Конвеєр з проміжним ToList у середині ланцюжка
+    sw.Restart();
+    var resultEager = dataset
+        .Where(x => x.DueDate < DateTime.Today)
+        .ToList()
+        .OrderByDescending(x => x.DaysOverdue)
+        .Select(x => x.Id)
+        .Take(50)
+        .ToList();
+    sw.Stop();
+    var timeEager = sw.ElapsedMilliseconds;
+
+    Console.WriteLine("--- РЕЗУЛЬТАТИ ВИМІРЮВАННЯ (Stopwatch) ---");
+    Console.WriteLine($"1. Без проміжного ToList() : {timeLazy} мс");
+    Console.WriteLine($"2. З проміжним ToList()    : {timeEager} мс");
+    Console.WriteLine($"Різниця: {timeEager - timeLazy} мс на користь лінивого конвеєра.");
 }
