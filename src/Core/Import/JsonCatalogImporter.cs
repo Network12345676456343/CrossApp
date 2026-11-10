@@ -55,6 +55,8 @@ public sealed class JsonCatalogImporter : ICatalogImporter
             ct.ThrowIfCancellationRequested();
             index++;
 
+            await Task.Delay(500, ct);
+            
             if (dto is null)
                 throw new DomainException($"Запис {index}: порожній елемент у каталозі.");
 

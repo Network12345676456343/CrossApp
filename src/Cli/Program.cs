@@ -24,6 +24,7 @@ for (var i = 0; i < args.Length; i++)
     }
 }
 
+//using var userCts = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
 using var userCts = new CancellationTokenSource();
 // Для демонстрації скасування через таймаут:
 //using var timeoutCts = new CancellationTokenSource(TimeSpan.FromMilliseconds(1));

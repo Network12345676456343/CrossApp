@@ -10,7 +10,7 @@ public sealed class BookCopy
     public bool IsIssued { get; private set; }
 
     // Публічний конструктор: дозволяє виклик як new BookCopy("BC-101"),
-    // так і передачу повних даних, не ламаючи валідацію
+    //передача повних даних, не ламаючи валідацію
     public BookCopy(string id, string isbn = "978-0-00-000000-0", string title = "Без назви", bool isIssued = false)
     {
         if (string.IsNullOrWhiteSpace(id))
