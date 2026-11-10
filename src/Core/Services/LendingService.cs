@@ -3,6 +3,8 @@ namespace Core.Services;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using Core.Abstractions;
 using Core.Domain;
 using Core.Events;
@@ -42,7 +44,7 @@ public sealed class LendingService(ILoanStore store)
     public void ReturnCopy(string loanId)
     {
         var loan = _store.GetById(loanId) 
-            ?? throw new InvalidOperationException($"Позичку з Id='{loanId}' не знайдено.");
+            ?? throw new DomainException($"Позичку з Id='{loanId}' не знайдено.");
 
         var copy = new BookCopy(loan.BookCopyId, isIssued: true);
         loan.Close(copy, DateTime.UtcNow);
@@ -51,6 +53,41 @@ public sealed class LendingService(ILoanStore store)
 
         // Підняття події ВИКЛЮЧНО після успішного оновлення
         OnChanged(loan, LoanChangeKind.Returned);
+    }
+
+    /// <summary>
+    /// Асинхронний потоковий імпорт примірників книг із підтримкою скасування та прогресу.
+    /// </summary>
+    public async Task<int> ImportAsync(
+        ICatalogImporter importer,
+        string filePath,
+        IProgress<ImportProgress>? progress = null,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(importer);
+
+        var addedCount = 0;
+
+        await foreach (var copy in importer.ReadCopiesAsync(filePath, progress, ct))
+        {
+            ct.ThrowIfCancellationRequested();
+
+            // Ініціалізуємо базову позичку в системі для імпортованого примірника (якщо потрібна реєстрація в ILoanStore)
+            var loanId = "LN-IMP-" + copy.Id;
+
+            if (_store.GetById(loanId) is not null)
+            {
+                continue; // Ідемпотентність: уникаємо дублікатів
+            }
+
+            var loan = Loan.Open(loanId, copy, "SYSTEM_IMPORT", DateTime.UtcNow);
+            _store.Add(loan);
+
+            OnChanged(loan, LoanChangeKind.Issued);
+            addedCount++;
+        }
+
+        return addedCount;
     }
 
     public IReadOnlyList<Loan> All() => _store.List();
