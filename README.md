@@ -1,89 +1,43 @@
-# CrossApp — Лабораторна робота 8
+# CrossApp — Система обліку бібліотечних видач
 
-async/await, скасування, доменні винятки, unit-тести Core
+Кросплатформний консольний застосунок на **.NET 10** для управління бібліотечним фондом та видачами книг (`Loan`), що підтримує типізовану ієрархічну конфігурацію, профілі середовищ, безпечне зберігання секретів та атомарну файлову персистентність.
+
+## Структура проєкту
+
+- `src/Core` — доменні моделі (`Book`, `BookCopy`, `Reader`, `Loan`), DTO, типізована конфігурація (`AppOptions`), сервіси (`LendingService`) та файлове сховище (`FileLoanStore`).
+- `src/Cli` — консольний застосунок, збирання конфігурації (`ConfigurationBuilder`), команди `import` та `export`.
+- `tests/Core.Tests` — модульні тести (`xUnit`) для перевірки доменних інваріантів, серіалізації та сховища.
 
 ---
 
-## 1. Запуск unit-тестів
+## Профілі середовища (`Development` та `Production`)
 
-Усі модульні тести розміщені в ізольованому проєкті `tests/Core.Tests` (xUnit), який посилається виключно на збірку `Core`:
+Активний профіль задається змінною середовища `CROSSAPP_ENVIRONMENT` (якщо змінну не встановлено, за замовчуванням використовується `Development`).
 
-```bash
-dotnet test
-```
+- **`Development`** (`appsettings.Development.json`) — використовується під час локальної розробки та тестування. Має детальний рівень логування (`Debug`), зберігає дані в окремий файл `library-dev.json` і встановлює скорочений термін видачі (`7` днів).
+- **`Production`** (`appsettings.json`) — базова конфігурація для робочого середовища. Фіксує лише попередження та помилки (`Warning`), використовує основний файл `library.json` і стандартний термін видачі (`14` днів).
 
-### Результат виконання тестів:
+Базовий каталог для збереження даних будується відносно каталогу скомпільованого застосунку (`AppContext.BaseDirectory`), що гарантує однаковий шлях незалежно від поточного робочого каталогу (`cwd`).
 
-- **Усього тестів:** 10
-- **Успішних:** 10
-- **Помилок:** 0
-- **Пропущених:** 0
+---
 
-Набір тестів покриває:
+## Таблиця ключів конфігурації
 
-- Інваріанти сутностей (`BookCopy.Issue`, `BookCopy.Return`).
-- Одноразову генерацію події `LendingService.Changed`.
-- Детерміновані розрахунки звітів у `ReportServiceTests` (`[Theory]`, `[InlineData]`).
-- Миттєву реакцію на попередньо скасований токен (`OperationCanceledException`).
-- Відхилення пошкоджених даних із тимчасового файлу з гарантованим очищенням у блоці `finally`.
-- Спрацювання таймауту у зв'язаних токенах (`CreateLinkedTokenSource`).
+| Ключ конфігурації | Змінна середовища | За замовчуванням (`Production`) | Профіль `Development` | Опис |
+| :--- | :--- | :--- | :--- | :--- |
+| `EnvironmentName` | `CROSSAPP_ENVIRONMENT` | `Production` | `Development` | Назва активного профілю середовища |
+| `Storage:DataPath` | `CROSSAPP_Storage__DataPath` або `CROSSAPP_DATA_PATH` | `data` | `data` | Шлях до каталогу збереження JSON-файлів (відносний або абсолютний) |
+| `Storage:FileName` | `CROSSAPP_Storage__FileName` | `library.json` | `library-dev.json` | Ім'я файлу сховища видач |
+| `Library:LoanDays` | `CROSSAPP_Library__LoanDays` | `14` | `7` | Стандартний термін видачі книги у днях |
+| `Logging:MinimumLevel` | `CROSSAPP_Logging__MinimumLevel` | `Warning` | `Debug` | Мінімальний рівень логування застосунку |
+| `Integration:ApiKey` | `CROSSAPP_Integration__ApiKey` *(або `user-secrets`)* | *(не задано)* | *(через `user-secrets`)* | Конфіденційний ключ інтеграції (не зберігається у Git) |
 
-## 2. Збір тестового покриття (Code Coverage)
+---
 
-Для генерації звіту про покриття коду тестами через вбудований збирач Coverlet:
+## Налаштування секретів (`user-secrets`)
 
-```bash
-dotnet test --collect:"XPlat Code Coverage"
-```
-
-Звіт у форматі `coverage.cobertura.xml` зберігається за шляхом:
-
-`tests/Core.Tests/TestResults/<GUID>/coverage.cobertura.xml`.
-
-## 3. Запуск CLI та сценарії поведінки
-
-Імпорт каталогу викликається передачею прапорця `--file`:
+Для безпечного локального зберігання `Integration:ApiKey` поза межами репозиторію використовується менеджер секретів .NET:
 
 ```bash
-dotnet run --project src/Cli -- --file data/sample.json
-```
-
-### Сценарії перевірки:
-
-**1. Успішний імпорт:**
-
-```bash
-dotnet run --project src/Cli -- --file data/sample.json
-```
-
-**Вивід:**
-
-```text
-[Прогрес] Опрацьовано записів: 17...
-Імпортовано записів: 17
-```
-
-**2. Перевірка скасування (Ctrl+C або таймаут):**
-
-- Під час імпорту натиснути `Ctrl+C` або вичерпати ліміт таймауту (`timeoutCts`).
-- Застосунок штатно перехоплює `OperationCanceledException` без аварійного стек-трейсу.
-
-**Вивід:**
-
-```text
-Імпорт скасовано.
-```
-
-**3. Обробка некоректних даних (DomainException):**
-
-- Запуск імпорту файлу з порушенням валідації (наприклад, порожній ISBN чи некоректний статус).
-
-```bash
-dotnet run --project src/Cli -- --file data/invalid.json
-```
-
-**Вивід:**
-
-```text
-Файл не знайдено: data/invalid.json
-```
+dotnet user-secrets init --project src/Cli
+dotnet user-secrets set "Integration:ApiKey" "your-secret-key" --project src/Cli
