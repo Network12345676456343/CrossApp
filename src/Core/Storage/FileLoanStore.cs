@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using Core.Abstractions;
 using Core.Domain;
@@ -11,8 +12,17 @@ using Core.Dto;
 
 public sealed class FileLoanStore(string path) : ILoanStore
 {
-    private static readonly JsonSerializerOptions Options = new() { WriteIndented = true };
-    private readonly string _path = path ?? throw new ArgumentNullException(nameof(path));
+    private static readonly JsonSerializerOptions Options = new()
+    {
+        WriteIndented = true,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+    };
+
+    private readonly string _path = !string.IsNullOrWhiteSpace(path)
+        ? path
+        : throw new ArgumentException("Шлях до файлу сховища не може бути порожнім.", nameof(path));
+
     private readonly Dictionary<string, Loan> _cache = new(StringComparer.OrdinalIgnoreCase);
     private bool _loaded;
 
@@ -22,15 +32,23 @@ public sealed class FileLoanStore(string path) : ILoanStore
 
         if (File.Exists(_path))
         {
-            var json = File.ReadAllText(_path);
-            if (!string.IsNullOrWhiteSpace(json))
+            try
             {
-                var dtos = JsonSerializer.Deserialize<List<LoanDto>>(json, Options) ?? [];
-                foreach (var dto in dtos)
+                var json = File.ReadAllText(_path);
+                if (!string.IsNullOrWhiteSpace(json))
                 {
-                    var loan = Loan.FromDto(dto);
-                    _cache[loan.Id] = loan;
+                    var dtos = JsonSerializer.Deserialize<List<LoanDto>>(json, Options) ?? [];
+                    _cache.Clear();
+                    foreach (var dto in dtos)
+                    {
+                        var loan = Loan.FromDto(dto);
+                        _cache[loan.Id] = loan;
+                    }
                 }
+            }
+            catch (JsonException ex)
+            {
+                throw new InvalidDataException($"Некоректний формат JSON у файлі '{_path}': {ex.Message}", ex);
             }
         }
 
@@ -44,7 +62,10 @@ public sealed class FileLoanStore(string path) : ILoanStore
             Directory.CreateDirectory(dir);
 
         var dtos = _cache.Values.Select(l => l.ToDto()).ToList();
-        File.WriteAllText(_path, JsonSerializer.Serialize(dtos, Options));
+        var tmpPath = _path + ".tmp";
+
+        File.WriteAllText(tmpPath, JsonSerializer.Serialize(dtos, Options));
+        File.Move(tmpPath, _path, overwrite: true);
     }
 
     public IReadOnlyList<Loan> List()
