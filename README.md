@@ -41,3 +41,75 @@
 ```bash
 dotnet user-secrets init --project src/Cli
 dotnet user-secrets set "Integration:ApiKey" "your-secret-key" --project src/Cli
+
+## Приклади запуску та перевизначення змінних
+
+### Windows (PowerShell)
+
+**1. Збірка проєкту та запуск тестів**
+
+```powershell
+dotnet build
+dotnet test
+```
+
+**2. Базовий запуск (профіль Development)**
+
+```powershell
+dotnet run --project src/Cli -- export
+dotnet run --project src/Cli -- import --file data/sample.json
+```
+
+**3. Перевизначення каталогу збереження та параметрів через змінні середовища**
+
+```powershell
+$env:CROSSAPP_DATA_PATH = "C:\Temp\CrossAppTest"
+$env:CROSSAPP_Library__LoanDays = "21"
+
+dotnet run --project src/Cli -- export
+```
+
+Очищення тимчасових змінних середовища:
+
+```powershell
+Remove-Item Env:\CROSSAPP_DATA_PATH
+Remove-Item Env:\CROSSAPP_Library__LoanDays
+```
+
+**4. Запуск у профілі Production**
+
+```powershell
+$env:CROSSAPP_ENVIRONMENT = "Production"
+
+dotnet run --project src/Cli -- export
+
+Remove-Item Env:\CROSSAPP_ENVIRONMENT
+```
+
+### Linux / macOS (Bash)
+
+**1. Збірка проєкту та запуск тестів**
+
+```bash
+dotnet build
+dotnet test
+```
+
+**2. Базовий запуск (профіль Development)**
+
+```bash
+dotnet run --project src/Cli -- export
+dotnet run --project src/Cli -- import --file data/sample.json
+```
+
+**3. Тимчасове перевизначення змінних для одного запуску**
+
+```bash
+CROSSAPP_DATA_PATH="/tmp/crossapp-test" CROSSAPP_Library__LoanDays=21 dotnet run --project src/Cli -- export
+```
+
+**4. Запуск у профілі Production**
+
+```bash
+CROSSAPP_ENVIRONMENT="Production" dotnet run --project src/Cli -- export
+```
